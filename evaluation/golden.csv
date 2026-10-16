@@ -1,0 +1,21 @@
+id,question,expected_terms
+case-01,Qual o CPV 72266000-7?,72266000-7
+case-02,Qual o CPV 72000000-5?,72000000-5
+case-03,Qual o CPV 72212900-8?,72212900-8
+case-04,Que contratos são aquisição de serviços?,Aquisição de serviços
+case-05,Que contratos são aquisição de bens móveis?,Aquisição de bens móveis
+case-06,Quais os contratos de Ajuste Direto Regime Geral?,Ajuste Direto Regime Geral
+case-07,Quais os contratos por Consulta Prévia?,Consulta Prévia
+case-08,Que entidade adjudicante aparece no contrato?,Entidade
+case-09,Que contratos têm execução em Portugal?,Portugal
+case-10,Qual o preço contratual 6750?,6750
+case-11,Qual o preço contratual 17510?,17510
+case-12,Qual o preço contratual 50500?,50500
+case-13,Que contratos mencionam software?,software
+case-14,Que contratos mencionam consultoria?,consultoria
+case-15,Que contratos têm o regime Código dos Contratos Públicos?,Código dos Contratos Públicos
+case-16,Que contratos têm CPV principal?,Principal
+case-17,Que contratos têm prazo de 365 dias?,365 dias
+case-18,Que contratos têm local Portugal?,Portugal
+case-19,Que contratos têm critérios materiais?,Critérios Materiais
+case-20,Que contratos têm procedimento centralizado?,Procedimento Centralizado

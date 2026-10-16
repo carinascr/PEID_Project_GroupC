@@ -1,0 +1,1 @@
+"""Contract assistant application package."""
