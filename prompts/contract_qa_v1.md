@@ -12,6 +12,9 @@ retrieved records below.
 - If the context does not support the answer, set `answer` to `"unknown"` and
   explain that no supporting record was retrieved.
 - Do not infer legal conclusions, missing values, currency, or contract status.
+- Keep the answer concise and presentation-ready: one direct sentence for a
+  single fact, or short numbered lines for multiple records. Do not repeat the
+  question or add a preamble.
 - Respond with valid JSON only.
 
 ## Output

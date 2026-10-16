@@ -116,11 +116,11 @@ def search_contracts(
         return []
     query_terms = set(_key(query).split())
     normalized_query = _key(query)
-    ranking_query = any(
-        phrase in normalized_query
-        for phrase in ("maior contrato", "maiores contrato", "preco contratual")
+    ranking_query = (
+        any(term in normalized_query for term in ("maior", "maiores"))
+        and ("contrat" in normalized_query or "preco" in normalized_query)
     )
-    if ranking_query and any(term in normalized_query for term in ("maior", "maiores")):
+    if ranking_query:
         requested_limit = re.search(r"\b(\d+)\b", normalized_query)
         result_limit = int(requested_limit.group(1)) if requested_limit else limit
         ranked = []

@@ -2,6 +2,7 @@ from pathlib import Path
 
 from contracts import format_context, load_contracts, search_contracts
 from assistant import answer_question
+from presentation import format_answer
 
 
 DATASET = Path(__file__).parents[1] / "data" / "contratos_formatados.csv"
@@ -41,3 +42,21 @@ def test_largest_contract_question_is_answered_without_llm_unknown():
     assert result["confidence"] == "high"
     assert result["answer"].startswith("1) contrato-")
     assert len(result["record_ids"]) == 10
+
+
+def test_ranked_answers_render_as_compact_markdown_table():
+    rendered = format_answer(
+        "1) contrato-0001 — 6750 — Compra de computadores portáteis\n"
+        "2) contrato-0002 — 5000 — Serviços de manutenção"
+    )
+    assert "| # | Contract | Contract price |" in rendered
+    assert "Compra de computadores portáteis" in rendered
+    assert "`contrato-0001`" not in rendered
+
+
+def test_ranked_answer_keeps_long_contract_summary_minimal():
+    rendered = format_answer(
+        "1) contrato-0001 — 6750 — "
+        "Aquisição de serviços muito longos para uma descrição contratual extensa"
+    )
+    assert "…" in rendered

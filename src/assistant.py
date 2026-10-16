@@ -28,7 +28,8 @@ def answer_question(contracts: list[Contract], question: str) -> dict:
     if "maior" in normalized_question and "contrat" in normalized_question:
         lines = [
             f"{index}) {contract.record_id} — "
-            f"{contract.fields['Preço Contratual']}"
+            f"{contract.fields['Preço Contratual']} — "
+            f"{contract.fields['Objeto do Contrato']}"
             for index, (contract, _) in enumerate(results, start=1)
         ]
         return {

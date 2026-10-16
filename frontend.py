@@ -5,7 +5,8 @@ from pathlib import Path
 import streamlit as st
 
 from src.assistant import answer_question
-from src.contracts import load_contracts, search_contracts
+from src.contracts import load_contracts
+from src.presentation import format_answer
 
 
 ROOT = Path(__file__).parent
@@ -20,41 +21,34 @@ def get_contracts():
 st.set_page_config(page_title="Contract Assistant", page_icon="📄", layout="centered")
 st.title("Contract Assistant")
 st.caption("Search Portuguese public-procurement contracts with grounded answers.")
-st.caption("Build: deterministic-ranking-v2")
+st.caption("Build: concise-answer-v1")
 
-question = st.text_area(
-    "Your question",
-    placeholder="Ex.: Qual o preço contratual do contrato para evolução do vertical de Gestão de Ocorrências?",
-    height=110,
-)
+with st.form("contract_question", clear_on_submit=False):
+    question = st.text_input(
+        "Your question",
+        placeholder="Ex.: Qual o preço contratual do contrato para evolução do vertical de Gestão de Ocorrências?",
+    )
+    submitted = st.form_submit_button(
+        "Ask",
+        type="primary",
+    )
 
-if st.button("Ask", type="primary", disabled=not question.strip()):
+if submitted:
+    if not question.strip():
+        st.warning("Enter a question before asking.")
+        st.stop()
     with st.spinner("Searching contracts and generating an answer..."):
         try:
             contracts = get_contracts()
-            normalized_question = question.casefold()
-            if "maior" in normalized_question and "contrat" in normalized_question:
-                ranked = search_contracts(contracts, question.strip())
-                result = {
-                    "answer": "\n".join(
-                        f"{index}) {contract.record_id} — "
-                        f"{contract.fields['Preço Contratual']}"
-                        for index, (contract, _) in enumerate(ranked, start=1)
-                    ),
-                    "record_ids": [contract.record_id for contract, _ in ranked],
-                    "confidence": "high",
-                }
-            else:
-                result = answer_question(contracts, question.strip())
+            result = answer_question(contracts, question.strip())
         except (FileNotFoundError, RuntimeError, ValueError) as exc:
             st.error(str(exc))
         else:
             st.subheader("Answer")
-            st.write(result["answer"])
-            st.caption(f"Confidence: {result['confidence']}")
+            st.markdown(format_answer(result["answer"]))
+            st.caption(f"Confidence · {result['confidence']}")
             if result["record_ids"]:
-                st.subheader("Sources")
-                for record_id in result["record_ids"]:
-                    st.code(record_id)
+                with st.expander("Sources"):
+                    st.caption(" · ".join(result["record_ids"]))
             else:
                 st.info("No supporting contract record was retrieved.")
