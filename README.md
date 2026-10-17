@@ -31,7 +31,10 @@ Never commit `.env` or paste the key into any file that is committed. If you thi
 ## Contract assistant
 
 The application searches the supplied contract snapshot and asks the course LLM
-to answer using retrieved, cited records:
+to answer using retrieved, cited records. Retrieval is hybrid: exact field and
+ranking questions use the deterministic lexical path, while a local SQLite
+TF-IDF vector index supplements lexical matching for semantic or paraphrased
+questions. The source dataset remains read-only.
 
 ```bash
 python src/app.py "Qual o preço contratual do contrato para evolução do vertical de Gestão de Ocorrências?"
@@ -50,4 +53,19 @@ Run the one-screen web frontend with:
 
 ```bash
 streamlit run frontend.py
+```
+
+Each answered question is persisted in `evaluation/traces.sqlite3` and exported
+to the readable `evaluation/traces.csv` file. Both are updated automatically
+after every successful answer. The CSV export is regenerated from SQLite using
+an atomic file replacement, so it does not contain partial writes.
+The `traces` table stores the input question, JSON output, prompt version, UTC
+timestamp, and elapsed latency in milliseconds. Set `EVALUATION_TRACE_DB` to
+write traces to another SQLite file and `EVALUATION_TRACE_CSV` to choose the
+matching CSV export path:
+
+```bash
+EVALUATION_TRACE_DB=/tmp/contract-traces.sqlite3 \
+EVALUATION_TRACE_CSV=/tmp/contract-traces.csv \
+python src/app.py "Que contratos têm CPV 72000000-5?"
 ```

@@ -11,6 +11,11 @@ from pathlib import Path
 from typing import Iterable
 import unicodedata
 
+try:
+    from .vector_store import ContractVectorStore
+except ImportError:
+    from vector_store import ContractVectorStore
+
 
 SOURCE_COLUMNS = (
     "Objeto do Contrato",
@@ -132,12 +137,18 @@ def search_contracts(
                 continue
             ranked.append((contract, price))
         return sorted(ranked, key=lambda item: (-item[1], item[0].record_id))[:result_limit]
+    vector_store = ContractVectorStore(
+        (contract.record_id, contract.text) for contract in contracts
+    )
+    vector_scores = dict(vector_store.search(query, limit=len(contracts)))
     scored = []
     for contract in contracts:
         terms = set(_key(contract.text).split())
         overlap = len(query_terms & terms)
         phrase_bonus = 2.0 if _key(query) in _key(contract.text) else 0.0
-        score = overlap / max(len(query_terms), 1) + phrase_bonus
+        lexical_score = overlap / max(len(query_terms), 1) + phrase_bonus
+        vector_score = vector_scores.get(contract.record_id, 0.0)
+        score = lexical_score + vector_score
         if score:
             scored.append((contract, score))
     return sorted(scored, key=lambda item: (-item[1], item[0].record_id))[:limit]
