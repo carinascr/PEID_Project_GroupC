@@ -6,16 +6,26 @@ import streamlit as st
 
 from src.assistant import answer_question
 from src.contracts import load_contracts
+from src.rag_database import ContractRagDatabase, build_rag_database
 from src.presentation import format_answer
 
 
 ROOT = Path(__file__).parent
 DATASET = ROOT / "data" / "contratos_formatados.csv"
+RAG_DATABASE = ROOT / "data" / "contracts_rag.sqlite3"
 
 
 @st.cache_resource
 def get_contracts():
     return load_contracts(DATASET)
+
+
+@st.cache_resource
+def get_rag_database():
+    contracts = get_contracts()
+    if not RAG_DATABASE.exists():
+        build_rag_database(contracts, RAG_DATABASE)
+    return ContractRagDatabase(RAG_DATABASE)
 
 
 st.set_page_config(page_title="Contract Assistant", page_icon="📄", layout="centered")
@@ -40,7 +50,9 @@ if submitted:
     with st.spinner("Searching contracts and generating an answer..."):
         try:
             contracts = get_contracts()
-            result = answer_question(contracts, question.strip())
+            result = answer_question(
+                contracts, question.strip(), database=get_rag_database()
+            )
         except (FileNotFoundError, RuntimeError, ValueError) as exc:
             st.error(str(exc))
         else:
@@ -49,6 +61,9 @@ if submitted:
             st.caption(f"Confidence · {result['confidence']}")
             if result["record_ids"]:
                 with st.expander("Sources"):
-                    st.caption(" · ".join(result["record_ids"]))
+                    st.caption(
+                        "CSV rows: "
+                        + " · ".join(str(row) for row in result["source_rows"])
+                    )
             else:
                 st.info("No supporting contract record was retrieved.")

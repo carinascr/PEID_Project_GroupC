@@ -34,10 +34,21 @@ The application searches the supplied contract snapshot and asks the course LLM
 to answer using retrieved, cited records. Retrieval is hybrid: exact field and
 ranking questions use the deterministic lexical path, while a local SQLite
 TF-IDF vector index supplements lexical matching for semantic or paraphrased
-questions. The source dataset remains read-only.
+questions. Each CSV row is indexed and passed to the model as one complete,
+explicitly bounded contract record, so fields from different contracts are not
+treated as one record. The source dataset remains read-only. On first use, the
+rows are converted into the persistent SQLite RAG database
+`data/contracts_rag.sqlite3`; this database stores each complete row,
+provenance, and its TF-IDF representation.
 
 ```bash
 python src/app.py "Qual o preço contratual do contrato para evolução do vertical de Gestão de Ocorrências?"
+```
+
+To rebuild the RAG database after replacing the source snapshot, run:
+
+```bash
+python -c "from pathlib import Path; from src.contracts import load_contracts; from src.rag_database import build_rag_database; build_rag_database(load_contracts('data/contratos_formatados.csv'), 'data/contracts_rag.sqlite3')"
 ```
 
 The source file is currently named `data/contratos_formatados.csv`, but contains
@@ -48,6 +59,12 @@ provenance. Run the offline retrieval evaluation with:
 python evaluation/run_eval.py
 pytest -q
 ```
+
+Questions containing calculation wording such as “how many”, “count”,
+“biggest”, “largest”, “smallest”, or their Portuguese equivalents are handled
+by the deterministic analytics skill in `src/analytics_skill.py`. Counts and
+price rankings run over complete contract records without an LLM call, and
+return the corresponding CSV source rows.
 
 Run the one-screen web frontend with:
 

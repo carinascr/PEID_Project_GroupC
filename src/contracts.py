@@ -8,13 +8,16 @@ import re
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import TYPE_CHECKING, Iterable
 import unicodedata
 
 try:
     from .vector_store import ContractVectorStore
 except ImportError:
     from vector_store import ContractVectorStore
+
+if TYPE_CHECKING:
+    from .rag_database import ContractRagDatabase
 
 
 SOURCE_COLUMNS = (
@@ -115,7 +118,10 @@ def load_contracts(path: str | Path) -> list[Contract]:
 
 
 def search_contracts(
-    contracts: list[Contract], query: str, limit: int = 5
+    contracts: list[Contract],
+    query: str,
+    limit: int = 5,
+    database: "ContractRagDatabase | None" = None,
 ) -> list[tuple[Contract, float]]:
     if not query.strip():
         return []
@@ -128,6 +134,8 @@ def search_contracts(
     if ranking_query:
         requested_limit = re.search(r"\b(\d+)\b", normalized_query)
         result_limit = int(requested_limit.group(1)) if requested_limit else limit
+        if database is not None:
+            return database.rank_largest(result_limit)
         ranked = []
         for contract in contracts:
             raw_price = contract.fields.get("Preço Contratual", "").replace(",", ".")
@@ -137,10 +145,16 @@ def search_contracts(
                 continue
             ranked.append((contract, price))
         return sorted(ranked, key=lambda item: (-item[1], item[0].record_id))[:result_limit]
-    vector_store = ContractVectorStore(
-        (contract.record_id, contract.text) for contract in contracts
-    )
-    vector_scores = dict(vector_store.search(query, limit=len(contracts)))
+    if database is not None:
+        database_results = database.search(query, limit=len(contracts))
+        vector_scores = dict(
+            (contract.record_id, score) for contract, score in database_results
+        )
+    else:
+        vector_store = ContractVectorStore(
+            (contract.record_id, contract.text) for contract in contracts
+        )
+        vector_scores = dict(vector_store.search(query, limit=len(contracts)))
     scored = []
     for contract in contracts:
         terms = set(_key(contract.text).split())
@@ -151,11 +165,28 @@ def search_contracts(
         score = lexical_score + vector_score
         if score:
             scored.append((contract, score))
-    return sorted(scored, key=lambda item: (-item[1], item[0].record_id))[:limit]
+    ranked = sorted(scored, key=lambda item: (-item[1], item[0].record_id))[:limit]
+    if len(ranked) > 1:
+        return sorted(ranked, key=lambda item: (item[0].source_row, item[0].record_id))
+    return ranked
 
 
 def format_context(results: list[tuple[Contract, float]]) -> str:
-    return "\n\n".join(
-        f"[{contract.record_id} | source row {contract.source_row}]\n{contract.text}"
-        for contract, _ in results
-    )
+    """Format retrieved contracts as independent, complete evidence blocks.
+
+    Keeping each source row inside explicit boundaries makes it harder for the
+    answering model to accidentally combine fields from different contracts.
+    """
+    blocks = []
+    for contract, _ in results:
+        blocks.append(
+            "\n".join(
+                [
+                    f"BEGIN CONTRACT {contract.record_id}",
+                    f"Source row: {contract.source_row}",
+                    contract.text,
+                    f"END CONTRACT {contract.record_id}",
+                ]
+            )
+        )
+    return "\n\n".join(blocks)
