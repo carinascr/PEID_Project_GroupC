@@ -17,9 +17,11 @@ ROOT = Path(__file__).parents[1]
 def test_golden_workbook_loads_only_populated_cases():
     cases = load_golden_cases(ROOT / "evaluation" / "goldenset.xlsx")
 
-    assert len(cases) == 13
+    assert len(cases) == 23
     assert cases[0].case_id == "1"
-    assert cases[-1].expected_answer == "#VALUE!"
+    assert cases[15].case_id == "16"
+    assert "EMEL" in cases[15].expected_answer
+    assert cases[-1].expected_answer == "14600"
 
 
 def test_deterministic_status_preserves_unknown_expected_answers():

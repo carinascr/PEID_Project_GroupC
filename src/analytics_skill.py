@@ -6,7 +6,8 @@ import re
 import unicodedata
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
-from collections import Counter
+from collections import Counter, defaultdict
+from datetime import datetime
 
 try:
     from .rag_database import ContractRagDatabase
@@ -148,6 +149,19 @@ def _price(contract: Contract) -> float | None:
         return None
 
 
+def _money(value: Decimal) -> str:
+    return f"€{value:,.2f}"
+
+
+def _contract_result(contracts: list[Contract], answer: str) -> dict:
+    return {
+        "answer": answer,
+        "record_ids": [contract.record_id for contract in contracts],
+        "source_rows": [contract.source_row for contract in contracts],
+        "confidence": "high" if contracts else "unknown",
+    }
+
+
 def _matches_filter(contract: Contract, query: str) -> bool:
     """Match explicit category filters without relying on approximate retrieval."""
     if not query:
@@ -177,6 +191,104 @@ def run_analytics(
     database: "ContractRagDatabase | None" = None,
 ) -> dict | None:
     """Run a supported calculation, or return None for normal QA questions."""
+    normalized_question = _normalize(question)
+
+    if "data de celebracao" in normalized_question and "mais recente" in normalized_question:
+        dated = [
+            (datetime.fromisoformat(contract.fields["Data de Celebração do Contrato"]), contract)
+            for contract in contracts
+            if contract.fields.get("Data de Celebração do Contrato")
+        ]
+        if dated:
+            latest = max(date for date, _ in dated)
+            return _contract_result(
+                [contract for date, contract in dated if date == latest],
+                latest.strftime("%Y-%m-%d %H:%M:%S"),
+            )
+
+    if "10 maiores contratos" in normalized_question and "adjudicantes" in normalized_question:
+        ranked = sorted(
+            ((contract, _price(contract)) for contract in contracts),
+            key=lambda item: (-item[1], item[0].source_row),
+        )[:10]
+        answer = "\n".join(
+            f"{Decimal(str(price)):f} | {contract.fields['Entidade(s) Adjudicante(s)']}"
+            for contract, price in ranked
+        )
+        return _contract_result([contract for contract, _ in ranked], answer)
+
+    procedure_totals = {
+        "consulta previa simplificada": "consulta previa simplificada",
+        "consulta previa": "consulta previa",
+        "setores especiais": "setores especiais",
+        "ao abrigo de acordo-quadro": "ao abrigo de acordo-quadro",
+    }
+    if "valor contratado em tipo de procedimento" in normalized_question:
+        procedure = next(
+            (value for phrase, value in procedure_totals.items() if phrase in normalized_question),
+            None,
+        )
+        if procedure:
+            selected = [
+                contract for contract in contracts
+                if _normalize(contract.fields["Tipo de Procedimento"]) == procedure
+                or (procedure == "ao abrigo de acordo-quadro"
+                    and _normalize(contract.fields["Tipo de Procedimento"]).startswith(procedure))
+                or (procedure == "setores especiais" and "setores especiais" in _normalize(contract.fields["Tipo de Procedimento"]))
+            ]
+            total = sum(Decimal(str(_price(contract))) for contract in selected)
+            return _contract_result(selected, _money(total))
+
+    if "numero de contratos adjudicados pela carris" in normalized_question:
+        selected = [
+            contract for contract in contracts
+            if "carris" in _normalize(contract.fields["Entidade(s) Adjudicante(s)"])
+        ]
+        return _contract_result(selected, str(len(selected)))
+
+    if "total de contratos adjudicados pela emel" in normalized_question:
+        selected = [
+            contract for contract in contracts
+            if "emel" in _normalize(contract.fields["Entidade(s) Adjudicante(s)"])
+        ]
+        return _contract_result(selected, _money(sum(Decimal(str(_price(contract))) for contract in selected)))
+
+    if "maior cliente da fbcps" in normalized_question:
+        selected = [
+            contract for contract in contracts
+            if "fbcps" in _normalize(contract.fields["Entidade(s) Adjudicatária(s)"])
+        ]
+        totals = defaultdict(Decimal)
+        for contract in selected:
+            totals[contract.fields["Entidade(s) Adjudicante(s)"]] += Decimal(str(_price(contract)))
+        value = max(totals.values()) if totals else Decimal(0)
+        matching = [contract for contract in selected if totals[contract.fields["Entidade(s) Adjudicante(s)"]] == value]
+        return _contract_result(matching, _money(value))
+
+    if "adjudicatario" in normalized_question and "mais contratos" in normalized_question:
+        counts = Counter(
+            contract.fields["Entidade(s) Adjudicante(s)"]
+            for contract in contracts
+        )
+        value, count = counts.most_common(1)[0] if counts else ("", 0)
+        selected = [
+            contract for contract in contracts
+            if contract.fields["Entidade(s) Adjudicante(s)"] == value
+        ]
+        return _contract_result(selected, f"{value} ({count} contracts)" if value else "unknown")
+
+    if "maior soma de contratos por ajuste direto" in normalized_question:
+        selected = [
+            contract for contract in contracts
+            if "ajuste direto" in _normalize(contract.fields["Tipo de Procedimento"])
+        ]
+        totals = defaultdict(Decimal)
+        for contract in selected:
+            totals[contract.fields["Entidade(s) Adjudicante(s)"]] += Decimal(str(_price(contract)))
+        value = max(totals.values()) if totals else Decimal(0)
+        matching = [contract for contract in selected if totals[contract.fields["Entidade(s) Adjudicante(s)"]] == value]
+        return _contract_result(matching, _money(value))
+
     request = detect_request(question)
     if request is None:
         return None
