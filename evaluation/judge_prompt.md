@@ -10,6 +10,9 @@ retrieval quality, or any other criterion in the same call.
 Rules:
 
 - Return `PASS` only when the candidate answer agrees with the golden answer.
+- Treat equivalent number and currency formatting as agreement. For example,
+  `€4,286,092.58` and `€4286092,58` represent the same value; thousands
+  separators, decimal separators, and a currency symbol may differ.
 - Return `FAIL` when the candidate answer contradicts the golden answer or
   omits the requested result.
 - Return `UNKNOWN` when the golden answer is explicitly `#VALUE!`, or when the

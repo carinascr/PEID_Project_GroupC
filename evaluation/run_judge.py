@@ -30,10 +30,21 @@ def main() -> int:
         type=Path,
         default=ROOT / "evaluation" / "latest_results.json",
     )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        help="Evaluate only the first N populated golden-set cases.",
+    )
     args = parser.parse_args()
+    if args.limit is not None and args.limit < 1:
+        parser.error("--limit must be greater than zero.")
 
     contracts = load_contracts(ROOT / "data" / "contratos_formatados.csv")
-    evidence = run_evaluation(contracts, use_llm_judge=args.judge)
+    evidence = run_evaluation(
+        contracts,
+        use_llm_judge=args.judge,
+        limit=args.limit,
+    )
     report = {
         "mode": "llm_judge" if args.judge else "deterministic",
         "golden_set": "evaluation/goldenset.xlsx",

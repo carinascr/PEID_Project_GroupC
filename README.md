@@ -72,6 +72,21 @@ Run the one-screen web frontend with:
 streamlit run frontend.py
 ```
 
+For faster and more reliable judge runs, use a small case limit and bound each
+LLM request:
+
+```bash
+LLM_TIMEOUT_SECONDS=15 \
+LLM_MAX_TOKENS=128 \
+python evaluation/run_judge.py --judge --limit 5 \
+  --output evaluation/judge_results_llm.json
+```
+
+`LLM_TIMEOUT_SECONDS` and `LLM_MAX_TOKENS` are optional. The defaults are 20
+seconds and 256 tokens. Requests do not retry automatically, preventing a
+rate-limited service from multiplying traffic. Golden cases marked `#VALUE!`
+are recorded as `UNKNOWN` without spending an LLM request.
+
 Each answered question is persisted in `evaluation/traces.sqlite3` and exported
 to the readable `evaluation/traces.csv` file. Both are updated automatically
 after every successful answer. The CSV export is regenerated from SQLite using

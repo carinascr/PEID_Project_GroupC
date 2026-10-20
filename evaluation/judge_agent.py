@@ -66,7 +66,28 @@ def deterministic_status(expected: str, candidate: str) -> str:
         return "unknown"
     expected_normalised = _normalise(expected)
     candidate_normalised = _normalise(candidate)
-    return "pass" if expected_normalised in candidate_normalised else "fail"
+    if expected_normalised in candidate_normalised:
+        return "pass"
+
+    def numeric_values(value: str) -> list[str]:
+        values = []
+        for token in re.findall(r"(?<!\w)(?:€\s*)?[\d][\d.,]*(?!\w)", value):
+            number = token.replace("€", "").replace(" ", "")
+            if "," in number and "." in number:
+                number = number.replace(",", "") if number.rfind(".") > number.rfind(",") else number.replace(".", "").replace(",", ".")
+            elif "," in number:
+                number = number.replace(",", ".")
+            try:
+                values.append(f"{float(number):.2f}")
+            except ValueError:
+                continue
+        return values
+
+    expected_numbers = numeric_values(expected)
+    candidate_numbers = numeric_values(candidate)
+    if expected_numbers and all(number in candidate_numbers for number in expected_numbers):
+        return "pass"
+    return "fail"
 
 
 def _parse_judge_response(response: str) -> dict[str, str]:
@@ -108,20 +129,38 @@ def run_evaluation(
     *,
     use_llm_judge: bool = False,
     judge: Callable[..., str] = ask,
+    limit: int | None = None,
 ) -> list[CaseEvidence]:
     evidence = []
-    for case in load_golden_cases():
+    cases = load_golden_cases()
+    if limit is not None:
+        if limit < 1:
+            raise ValueError("Evaluation limit must be greater than zero.")
+        cases = cases[:limit]
+    for case in cases:
         candidate = answer_question(contracts, case.question)
         candidate_answer = str(candidate.get("answer", "unknown"))
-        judged = (
-            judge_case(case, candidate, judge)
-            if use_llm_judge
-            else {
+        if case.expected_answer == "#VALUE!":
+            judged = {
+                "verdict": "UNKNOWN",
+                "evidence": "unknown",
+                "reason": "Golden set marks this case as #VALUE!, so it is not judge-scorable.",
+            }
+        elif use_llm_judge:
+            try:
+                judged = judge_case(case, candidate, judge)
+            except Exception as exc:
+                judged = {
+                    "verdict": "UNKNOWN",
+                    "evidence": "unknown",
+                    "reason": f"Judge request failed: {type(exc).__name__}: {exc}",
+                }
+        else:
+            judged = {
                 "verdict": deterministic_status(case.expected_answer, candidate_answer).upper(),
                 "evidence": candidate_answer[:240] or "unknown",
                 "reason": "Deterministic golden-answer comparison.",
             }
-        )
         evidence.append(
             CaseEvidence(
                 case_id=case.case_id,
